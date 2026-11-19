@@ -33,6 +33,27 @@ CREATE TABLE IF NOT EXISTS handover_links (
     FOREIGN KEY (run_id, high_water, result_id)
         REFERENCES stopped_results(run_id, high_water, result_id)
 );
+CREATE TABLE IF NOT EXISTS live_results (
+    result_id TEXT PRIMARY KEY NOT NULL,
+    run_id TEXT NOT NULL,
+    camera_id TEXT NOT NULL,
+    capacity TEXT NOT NULL,
+    width TEXT NOT NULL,
+    height TEXT NOT NULL,
+    threshold TEXT NOT NULL,
+    frame_count TEXT NOT NULL,
+    grayscale_total TEXT NOT NULL,
+    over_limit_count TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS live_frames (
+    result_id TEXT NOT NULL REFERENCES live_results(result_id),
+    position INTEGER NOT NULL CHECK (position >= 0),
+    slot INTEGER NOT NULL CHECK (slot >= 0),
+    source_sequence TEXT NOT NULL,
+    original_bytes BLOB NOT NULL,
+    digest TEXT NOT NULL CHECK (length(digest) = 64),
+    PRIMARY KEY (result_id, position)
+);
 COMMIT;
 '''
 

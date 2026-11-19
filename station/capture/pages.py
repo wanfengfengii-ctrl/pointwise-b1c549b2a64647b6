@@ -36,6 +36,10 @@ class PageStore:
         self._check_address(address)
         return bytes(self._pages[address])
 
+    def release_page(self, address: int) -> None:
+        self._check_address(address)
+        del self._pages[address]
+
     def close(self) -> None:
         self._closed = True
         self._pages.clear()

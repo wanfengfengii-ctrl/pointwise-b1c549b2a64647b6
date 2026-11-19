@@ -3,7 +3,13 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from os import PathLike
 
-from station.archive.manifest import ArchiveHeader, ArchiveIntegrityError, ArchivedFrame
+from station.archive.manifest import (
+    ArchiveHeader,
+    ArchiveIntegrityError,
+    ArchivedFrame,
+    LiveArchiveHeader,
+    LiveArchivedFrame,
+)
 from station.archive.schema import decode_exact_integer, encode_exact_integer, initialize_archive
 from station.handover.tickets import HandoverLink
 from station.quality.window import WindowValues
@@ -123,6 +129,44 @@ class ArchiveStore:
                 self._before_commit(header.result_id)
         return header.result_id
 
+    def commit_live(self, header: LiveArchiveHeader, frames: tuple[LiveArchivedFrame, ...]) -> str:
+        """Publish a complete live-sealed window collected and measured by the issuer."""
+        if not frames or len(frames) != header.values.frame_count:
+            raise ValueError('publication requires a complete nonempty live window')
+        with self._transaction(write=True):
+            row = self._connection.execute(
+                'SELECT result_id FROM live_results WHERE result_id = ?', (header.result_id,)
+            ).fetchone()
+            if row is not None:
+                return header.result_id
+
+            config = header.config
+            values = header.values
+            self._connection.execute(
+                '''INSERT INTO live_results (
+                       result_id, run_id, camera_id, capacity, width, height,
+                       threshold, frame_count, grayscale_total, over_limit_count
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (
+                    header.result_id, header.run_id, header.camera_id,
+                    encode_exact_integer(config.capacity), encode_exact_integer(config.width),
+                    encode_exact_integer(config.height), encode_exact_integer(config.threshold),
+                    encode_exact_integer(values.frame_count), encode_exact_integer(values.grayscale_total),
+                    encode_exact_integer(values.over_limit_count),
+                ),
+            )
+            for frame in frames:
+                self._connection.execute(
+                    '''INSERT INTO live_frames (
+                           result_id, position, slot, source_sequence, original_bytes, digest
+                       ) VALUES (?, ?, ?, ?, ?, ?)''',
+                    (header.result_id, frame.position, frame.slot,
+                     encode_exact_integer(frame.sequence), frame.data, frame.digest),
+                )
+            if self._before_commit is not None:
+                self._before_commit(header.result_id)
+        return header.result_id
+
     @staticmethod
     def _decode_header(row: sqlite3.Row) -> ArchiveHeader:
         camera_id = row['camera_id']
@@ -165,6 +209,56 @@ class ArchiveStore:
                 )
             except ValueError as exc:
                 raise ArchiveIntegrityError('invalid archived header or source sequence') from exc
+        return header, frames
+
+    @staticmethod
+    def _decode_live_header(row: sqlite3.Row) -> LiveArchiveHeader:
+        camera_id = row['camera_id']
+        if type(camera_id) is not str or not camera_id:
+            raise ValueError('invalid archived camera ID')
+        run_id = row['run_id']
+        if type(run_id) is not str or not run_id:
+            raise ValueError('invalid archived run ID')
+        result_id = row['result_id']
+        if type(result_id) is not str or not result_id:
+            raise ValueError('invalid archived result ID')
+        config = make_run_config(
+            decode_exact_integer(row['capacity']),
+            decode_exact_integer(row['width']),
+            decode_exact_integer(row['height']),
+            decode_exact_integer(row['threshold']),
+        )
+        values = WindowValues(
+            decode_exact_integer(row['frame_count']),
+            decode_exact_integer(row['grayscale_total']),
+            decode_exact_integer(row['over_limit_count']),
+        )
+        return LiveArchiveHeader(result_id, run_id, camera_id, config, values)
+
+    def load_live(self, result_id: str) -> tuple[LiveArchiveHeader, tuple[LiveArchivedFrame, ...]]:
+        if type(result_id) is not str:
+            raise KeyError(result_id)
+        with self._transaction(write=False):
+            row = self._connection.execute(
+                'SELECT * FROM live_results WHERE result_id = ?', (result_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(result_id)
+            frame_rows = self._connection.execute(
+                '''SELECT position, slot, source_sequence, original_bytes, digest
+                   FROM live_frames WHERE result_id = ? ORDER BY position''',
+                (result_id,),
+            )
+            try:
+                header = self._decode_live_header(row)
+                frames = tuple(
+                    LiveArchivedFrame(frame['position'], frame['slot'],
+                                      decode_exact_integer(frame['source_sequence']),
+                                      frame['original_bytes'], frame['digest'])
+                    for frame in frame_rows
+                )
+            except ValueError as exc:
+                raise ArchiveIntegrityError('invalid archived live header or source sequence') from exc
         return header, frames
 
     def read_handover_link(self, run_id: str) -> HandoverLink | None:

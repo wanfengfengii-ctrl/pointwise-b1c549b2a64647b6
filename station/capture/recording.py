@@ -43,6 +43,32 @@ class CaptureRecorder:
         ring = self._current_ring(run_id)
         return None if ring is None else ring.high_water
 
+    def freeze_window(self, run_id: str) -> tuple[SlotRef, ...]:
+        """Register the run's current valid slots as a frozen window for live sealing."""
+        self._require_open()
+        run = self._registry.get_run(run_id)
+        run.lifecycle.require_running()
+        ring = self._rings.get(run_id)
+        if ring is None:
+            raise ValueError(f'run {run_id!r} has an empty ring to freeze')
+        return ring.freeze()
+
+    def collect_frozen(self, run_id: str, slot: int, sequence: int) -> bytes:
+        self._require_open()
+        self._registry.get_run(run_id)
+        ring = self._rings.get(run_id)
+        if ring is None:
+            raise ValueError(f'run {run_id!r} has no frozen window')
+        return ring.collect_frozen(slot, sequence)
+
+    def release_frozen(self, run_id: str, slot: int, sequence: int) -> None:
+        self._require_open()
+        self._registry.get_run(run_id)
+        ring = self._rings.get(run_id)
+        if ring is None:
+            raise ValueError(f'run {run_id!r} has no frozen window')
+        ring.release_frozen(slot, sequence)
+
     def slot_index(self, run_id: str) -> tuple[SlotRef, ...]:
         ring = self._current_ring(run_id)
         return () if ring is None else tuple(ring.iter_slot_refs())
