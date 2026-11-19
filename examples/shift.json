@@ -1,0 +1,15 @@
+{
+  "camera_id": "line-cam",
+  "config": {"capacity": 2, "width": 2, "height": 1, "threshold": 5},
+  "frames": [
+    {"sequence": 10, "pixels": [0, 2]},
+    {"sequence": 14, "pixels": [1, 4]},
+    {"sequence": 20, "pixels": [3, 4]}
+  ],
+  "expected": {
+    "writes": [{"slot": 0, "high_water": 10}, {"slot": 1, "high_water": 14}, {"slot": 0, "high_water": 20}],
+    "live": {"frame_count": 2, "grayscale_total": 12, "over_limit_count": 1},
+    "handover": "signed",
+    "archived_frames": [{"sequence": 14, "pixels": [1, 4]}, {"sequence": 20, "pixels": [3, 4]}]
+  }
+}

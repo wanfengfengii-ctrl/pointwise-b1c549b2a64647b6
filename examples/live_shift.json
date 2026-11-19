@@ -1,0 +1,15 @@
+{
+  "camera_id": "line-cam",
+  "config": {"capacity": 2, "width": 1, "height": 1, "threshold": 5},
+  "before_freeze": [{"sequence": 10, "pixels": [2]}, {"sequence": 14, "pixels": [7]}],
+  "before_first_collect": [{"sequence": 20, "pixels": [9]}, {"sequence": 24, "pixels": [4]}],
+  "after_stage_failure": [{"sequence": 29, "pixels": [2]}, {"sequence": 34, "pixels": [8]}, {"sequence": 39, "pixels": [6]}],
+  "after_seal_failure": [{"sequence": 45, "pixels": [5]}],
+  "expected": {
+    "after_first_overwrites": {"frame_count": 2, "grayscale_total": 13, "over_limit_count": 1},
+    "after_stage_failure_writes": {"frame_count": 2, "grayscale_total": 14, "over_limit_count": 2},
+    "after_seal_failure_writes": {"frame_count": 2, "grayscale_total": 11, "over_limit_count": 1},
+    "archive_frames": [{"slot": 0, "sequence": 10, "pixels": [2]}, {"slot": 1, "sequence": 14, "pixels": [7]}],
+    "archive_values": {"frame_count": 2, "grayscale_total": 9, "over_limit_count": 1}
+  }
+}
